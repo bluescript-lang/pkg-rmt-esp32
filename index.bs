@@ -103,6 +103,7 @@ export class RmtCopyEncoder extends RmtEncoder {
     reset(): void {
         const encHandle = this.copyEncoderHandle[0];
         code`${this.lastOperationResult} = builtin_encoder_reset(${encHandle})`;
+        this.done = false;
     }
 
     deinit(): void {
@@ -141,7 +142,6 @@ export class RmtByteEncoder extends RmtEncoder {
         this.channelHandle = [chHandle];
         this.bytesEncoderHandle = [0];
         if (this.lastOperationResult !== RmtResult.OK) { // if custome_encoder_new failed
-            console.log("foo" + this.lastOperationResult);
             return;
         }
         let bytesHandle = 0;
@@ -188,6 +188,7 @@ export class RmtByteEncoder extends RmtEncoder {
     reset(): void {
         const encHandle = this.bytesEncoderHandle[0];
         code`${this.lastOperationResult} = builtin_encoder_reset(${encHandle})`;
+        this.done = false;
     }
 
     deinit(): void {
