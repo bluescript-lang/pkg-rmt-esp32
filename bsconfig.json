@@ -1,0 +1,9 @@
+{
+  "projectName": "pkg-rmt-esp32",
+  "version": "1.0.0",
+  "vmVersion": "2.0.1",
+  "deviceName": "BLUESCRIPT",
+  "dependencies": {},
+  "boardName": "esp32",
+  "espIdfComponents": ["esp_driver_rmt", "core"]
+}

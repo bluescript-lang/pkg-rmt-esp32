@@ -1,0 +1,253 @@
+code`#include "rmt_helper.c"`
+code`#include "c-runtime.h"`
+
+
+export class RmtSymbol {
+    level0: integer;  // Logical level of the first pulse (1: HIGH, 0: LOW)
+    ticks0: integer;  // Length of the first pulse (number of ticks / usually set to 1 tick = 1 us)
+    level1: integer;  // Logical level of the second pulse
+    ticks1: integer;  // Length of the second pulse
+
+    constructor(level0: integer, ticks0: integer, level1: integer, ticks1: integer) {
+        this.level0 = level0;
+        this.ticks0 = ticks0;
+        this.level1 = level1;
+        this.ticks1 = ticks1;
+    }
+}
+
+export enum RmtResult {
+    OK = 0,
+    Fail = 1,
+    Timeout = 2,
+    InvalidArg = 3,
+    NoMemory = 4,
+    NotFound = 5,
+    NotSupported = 6,
+    InvalidState = 7,
+}
+
+export class RmtEncoder {
+    channel: RmtTxChannel;
+    handle: integer;
+    lastOperationResult: RmtResult;
+    _encode: (data: Uint8Array) => integer;
+    _isDone: () => boolean;
+    _reset: () => void;
+    _deinit: () => void;
+
+	constructor(channel: RmtTxChannel){
+        this.channel = channel;
+        this._encode = (data: Uint8Array): integer => { return this.encode(data) };
+        this._isDone = (): boolean => { return this.isDone() };
+        this._reset = (): void => { this.reset() };
+        this._deinit = (): void => { this.deinit() };
+        let handle = 0;
+        this.lastOperationResult = RmtResult.Fail;
+        code`${this.lastOperationResult} = custome_encoder_new(${this._encode}, ${this._isDone}, ${this._reset}, ${this._deinit}, &${handle})`;
+        this.handle = handle;
+    }
+
+	encode(data: Uint8Array): integer { 
+        return 0; 
+    }
+
+    isDone(): boolean { return true; }
+
+    reset(): void {}
+
+    deinit(): void {}
+
+    close() {
+        code`${this.lastOperationResult} = custome_encoder_close(${this.handle})`;
+    }
+}
+
+export class RmtCopyEncoder extends RmtEncoder {
+    copyEncoderHandle: integer[];
+    channelHandle: integer[];
+    done: boolean;
+
+    constructor(channel: RmtTxChannel) {
+        super(channel);
+        this.done = false;
+        const chHandle: integer = channel.handle;
+        this.channelHandle = [chHandle];
+        let copyHandle = 0;
+        this.copyEncoderHandle = [0];
+        if (this.lastOperationResult !== RmtResult.OK) { // custome_encoder_new failed
+            return;
+        }
+        code`${this.lastOperationResult} = copy_encoder_new(&${copyHandle})`;
+        this.copyEncoderHandle = [copyHandle];
+    }
+
+    encode(data: Uint8Array): integer {
+        const size = data.length;
+        const chHandle = this.channelHandle[0];
+        const encHandle = this.copyEncoderHandle[0];
+        let encodedSymbols = 0;
+        let done = true;
+        code`
+        void *c_data = get_native_ptr(${data});
+        ${encodedSymbols} = builtin_encoder_encode(${encHandle}, ${chHandle}, c_data, ${size}, &${done});
+        `
+        this.done = done;
+        return 0;
+	}
+
+    isDone(): boolean {
+        return this.done;
+    }
+
+    reset(): void {
+        const encHandle = this.copyEncoderHandle[0];
+        code`${this.lastOperationResult} = builtin_encoder_reset(${encHandle})`;
+    }
+
+    deinit(): void {
+        const encHandle = this.copyEncoderHandle[0];
+        code`${this.lastOperationResult} = builtin_encoder_deinit(${encHandle})`;
+    }
+
+    symbolsToUint8Array(symbols: RmtSymbol[]): Uint8Array {
+        const symbolCount = symbols.length;
+        const rawBuffer = new Uint8Array(symbolCount * 4, 0);
+        for (let i = 0; i < symbolCount; i++) {
+            const sym = symbols[i];
+            const word = (sym.ticks0 & 0x7FFF) 
+                       | ((sym.level0 & 1) << 15) 
+                       | ((sym.ticks1 & 0x7FFF) << 16) 
+                       | ((sym.level1 & 1) << 31);
+            const offset = i * 4;
+            rawBuffer[offset + 0] = word & 0xFF;
+            rawBuffer[offset + 1] = (word >> 8) & 0xFF;
+            rawBuffer[offset + 2] = (word >> 16) & 0xFF;
+            rawBuffer[offset + 3] = (word >> 24) & 0xFF;
+        }
+        return rawBuffer;
+    }
+}
+
+export class RmtByteEncoder extends RmtEncoder {
+    bytesEncoderHandle: integer[];
+    channelHandle: integer[];
+    done: boolean;
+
+    constructor(channel: RmtTxChannel, bit0: RmtSymbol, bit1: RmtSymbol, msbFirst: boolean) {
+        super(channel);
+        this.done = false;
+        const chHandle: integer = channel.handle;
+        this.channelHandle = [chHandle];
+        this.bytesEncoderHandle = [0];
+        if (this.lastOperationResult !== RmtResult.OK) { // if custome_encoder_new failed
+            console.log("foo" + this.lastOperationResult);
+            return;
+        }
+        let bytesHandle = 0;
+        const bit0Ticks0 = bit0.ticks0;
+        const bit0Level0 = bit0.level0;
+        const bit0Ticks1 = bit0.ticks1;
+        const bit0Level1 = bit0.level1;
+        const bit1Ticks0 = bit1.ticks0;
+        const bit1Level0 = bit1.level0;
+        const bit1Ticks1 = bit1.ticks1;
+        const bit1Level1 = bit1.level1;
+        code`
+        rmt_symbol_word_t bit0 = {
+            .duration0 = ${bit0Ticks0}, .level0 = ${bit0Level0},
+            .duration1 = ${bit0Ticks1}, .level1 = ${bit0Level1}
+        };
+        rmt_symbol_word_t bit1 = {
+            .duration0 = ${bit1Ticks0}, .level0 = ${bit1Level0},
+            .duration1 = ${bit1Ticks1}, .level1 = ${bit1Level1}
+        };
+        ${this.lastOperationResult} = bytes_encoder_new(bit0, bit1, ${msbFirst}, &${bytesHandle});
+        `;
+        this.bytesEncoderHandle = [bytesHandle];
+    }
+
+    encode(data: Uint8Array): integer {
+        const size = data.length;
+        const chHandle = this.channelHandle[0];
+        const encHandle = this.bytesEncoderHandle[0];
+        let encodedSymbols = 0;
+        let done = true;
+        code`
+        void *c_data = get_native_ptr(${data});
+        ${encodedSymbols} = builtin_encoder_encode(${encHandle}, ${chHandle}, c_data, ${size}, &${done});
+        `
+        this.done = done;
+        return 0;
+	}
+
+    isDone(): boolean {
+        return this.done;
+    }
+
+    reset(): void {
+        const encHandle = this.bytesEncoderHandle[0];
+        code`${this.lastOperationResult} = builtin_encoder_reset(${encHandle})`;
+    }
+
+    deinit(): void {
+        const encHandle = this.bytesEncoderHandle[0];
+        code`${this.lastOperationResult} = builtin_encoder_deinit(${encHandle})`;
+    }
+}
+
+export class RmtTxChannel {
+    handle: integer;
+    lastOperationResult: RmtResult;
+    pin: integer;
+    resolutionHz: integer;
+    encoder: RmtEncoder | null;
+    data: Uint8Array | null;
+	
+	constructor(pin: integer, resolutionHz: integer) {
+        this.pin = pin;
+        this.resolutionHz = resolutionHz;
+        this.encoder = null;
+        this.data = null;
+
+        let handle = 0;
+        this.lastOperationResult = RmtResult.Fail;
+        code`${this.lastOperationResult} = tx_channel_new(${pin}, ${resolutionHz}, &${handle})`;
+        if (this.lastOperationResult !== RmtResult.OK) {
+            return;
+        }
+        code`${this.lastOperationResult} = tx_channel_enable(${handle})`;
+        this.handle = handle;
+	}
+	
+	transmitAsync(encoder: RmtEncoder, data: Uint8Array, loopCount: integer) {
+		this.encoder = encoder; // To prevent encoder from being collected by the GC.
+        this.data = data; // To prevent encoder from being collected by the GC.
+        const encHandle = encoder.handle;
+        const dataSize = data.length;
+        code`${this.lastOperationResult} = transmit_async(${this.handle}, ${encHandle}, ${loopCount}, ${data}, ${dataSize})`;
+
+	}
+
+    waitTransmitCompleted(timeoutMs: integer) {
+        code`${this.lastOperationResult} = wait_transmit_completed(${this.handle}, ${timeoutMs})`;
+        this.encoder = null;
+        this.data = null;
+    }
+
+    transmit(encoder: RmtEncoder, data: Uint8Array, loopCount: integer, timeoutMs: integer) {
+        this.transmitAsync(encoder, data, loopCount);
+        if (this.lastOperationResult !== RmtResult.OK) {
+            return;
+        }
+        this.waitTransmitCompleted(timeoutMs);
+    }
+
+    close() {
+        code`${this.lastOperationResult} = tx_channel_disable(${this.handle})`;
+        if (this.lastOperationResult !== RmtResult.OK) {
+            return;
+        }
+        code`${this.lastOperationResult} = tx_channel_delete(${this.handle})`;
+    }
+}
