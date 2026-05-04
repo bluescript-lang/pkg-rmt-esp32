@@ -51,10 +51,10 @@ channel.close();
 ```
 
 ### Example 2: Transmitting Custom Symbols (e.g., IR Remote)
-Using `RmtCopyEncoder`, you can define exact timings for each individual high/low pulse.
+Using `RmtCopyEncoder` along with the `symbolsToUint8Array` utility function, you can define exact timings for each individual high/low pulse.
 
 ```typescript
-import { RmtTxChannel, RmtCopyEncoder, RmtSymbol } from "rmt";
+import { RmtTxChannel, RmtCopyEncoder, RmtSymbol, symbolsToUint8Array } from "rmt";
 
 // 1MHz resolution (1 tick = 1 us)
 const channel = new RmtTxChannel(14, 1000000);
@@ -69,7 +69,7 @@ const symbols = [
 ];
 
 // Convert symbols to raw byte array
-const rawData = encoder.symbolsToUint8Array(symbols);
+const rawData = symbolsToUint8Array(symbols);
 
 // Transmit asynchronously and do other tasks
 channel.transmitAsync(encoder, rawData, 0);
@@ -88,7 +88,7 @@ You can create a highly customized encoding process by extending the base `RmtEn
 
 > ⚠️ **Important Limitations for Custom Encoders**
 > 
-> The `encode` method is executed directly inside an **Hardware Interrupt Service Routine (ISR)**. Because of this, you must strictly follow these rules:
+> The `encode` method is executed directly inside a **Hardware Interrupt Service Routine (ISR)**. Because of this, you must strictly follow these rules:
 > 1. **Do not block:** Never use `time.delay()` or wait for locks. Execution must be as fast as possible.
 > 2. **No heavy processing:** Avoid complex math or heavy loops.
 > 3. **Do not allocate memory:** Do not create new objects or arrays inside `encode()` (e.g., `new Uint8Array()`). Allocating memory can trigger the Garbage Collector (GC) inside the interrupt, which will crash the system. Always pre-allocate necessary buffers in the constructor.
@@ -133,6 +133,12 @@ channel.transmit(customEncoder, new Uint8Array(4, 0), 0, 1000);
 ```
 
 ## API Reference
+
+### Global Functions
+
+#### `symbolsToUint8Array(symbols: RmtSymbol[]): Uint8Array`
+Converts an array of `RmtSymbol` objects into the native memory layout (`Uint8Array`) required for transmission. The result of this function should be passed as the `data` argument to `channel.transmit()`.
+
 
 ### Class: `RmtTxChannel`
 Represents an RMT Transmit hardware channel.
@@ -185,9 +191,6 @@ An encoder that directly copies pre-formatted raw symbols to the RMT channel. Us
 
 #### `constructor(channel: RmtTxChannel)`
 Creates a copy encoder attached to a channel.
-
-#### `symbolsToUint8Array(symbols: RmtSymbol[]): Uint8Array`
-Converts an array of `RmtSymbol` objects into the native memory layout (`Uint8Array`) required for transmission. You must pass the result of this function to `channel.transmit()`.
 
 
 ## Enums

@@ -16,6 +16,24 @@ export class RmtSymbol {
     }
 }
 
+export function symbolsToUint8Array(symbols: RmtSymbol[]): Uint8Array {
+    const symbolCount = symbols.length;
+    const rawBuffer = new Uint8Array(symbolCount * 4, 0);
+    for (let i = 0; i < symbolCount; i++) {
+        const sym = symbols[i];
+        const word = (sym.ticks0 & 0x7FFF) 
+                    | ((sym.level0 & 1) << 15) 
+                    | ((sym.ticks1 & 0x7FFF) << 16) 
+                    | ((sym.level1 & 1) << 31);
+        const offset = i * 4;
+        rawBuffer[offset + 0] = word & 0xFF;
+        rawBuffer[offset + 1] = (word >> 8) & 0xFF;
+        rawBuffer[offset + 2] = (word >> 16) & 0xFF;
+        rawBuffer[offset + 3] = (word >> 24) & 0xFF;
+    }
+    return rawBuffer;
+}
+
 export enum RmtResult {
     OK = 0,
     Fail = 1,
@@ -109,24 +127,6 @@ export class RmtCopyEncoder extends RmtEncoder {
     deinit(): void {
         const encHandle = this.copyEncoderHandle[0];
         code`${this.lastOperationResult} = builtin_encoder_deinit(${encHandle})`;
-    }
-
-    symbolsToUint8Array(symbols: RmtSymbol[]): Uint8Array {
-        const symbolCount = symbols.length;
-        const rawBuffer = new Uint8Array(symbolCount * 4, 0);
-        for (let i = 0; i < symbolCount; i++) {
-            const sym = symbols[i];
-            const word = (sym.ticks0 & 0x7FFF) 
-                       | ((sym.level0 & 1) << 15) 
-                       | ((sym.ticks1 & 0x7FFF) << 16) 
-                       | ((sym.level1 & 1) << 31);
-            const offset = i * 4;
-            rawBuffer[offset + 0] = word & 0xFF;
-            rawBuffer[offset + 1] = (word >> 8) & 0xFF;
-            rawBuffer[offset + 2] = (word >> 16) & 0xFF;
-            rawBuffer[offset + 3] = (word >> 24) & 0xFF;
-        }
-        return rawBuffer;
     }
 }
 
