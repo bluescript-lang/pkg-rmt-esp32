@@ -214,10 +214,6 @@ export class RmtTxChannel {
         let handle = 0;
         this.lastOperationResult = RmtResult.Fail;
         code`${this.lastOperationResult} = tx_channel_new(${pin}, ${resolutionHz}, &${handle})`;
-        if (this.lastOperationResult !== RmtResult.OK) {
-            return;
-        }
-        code`${this.lastOperationResult} = tx_channel_enable(${handle})`;
         this.handle = handle;
 	}
 	
@@ -245,10 +241,6 @@ export class RmtTxChannel {
     }
 
     close() {
-        code`${this.lastOperationResult} = tx_channel_disable(${this.handle})`;
-        if (this.lastOperationResult !== RmtResult.OK) {
-            return;
-        }
-        code`${this.lastOperationResult} = tx_channel_delete(${this.handle})`;
+        code`${this.lastOperationResult} = tx_channel_deinit(${this.handle})`;
     }
 }

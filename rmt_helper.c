@@ -159,23 +159,18 @@ RMT_RESULT tx_channel_new(int32_t pin, int32_t resolution_hz, int32_t *ret_handl
         .trans_queue_depth = 4, // set the number of transactions that can be pending in the background
     };
     esp_err_t err = rmt_new_tx_channel(&chan_config, &channel_handle);
+    if (err != ESP_OK) {
+        return esp_err_to_rmt_result(err);
+    }
+    err = rmt_enable(channel_handle);
     *ret_handle = (int32_t)channel_handle;
     return esp_err_to_rmt_result(err);
 }
 
-RMT_RESULT tx_channel_delete(int32_t channel_handle) {
-    esp_err_t err = rmt_del_channel((rmt_channel_handle_t)channel_handle);
-    return esp_err_to_rmt_result(err);
-}
-
-RMT_RESULT tx_channel_enable(int32_t channel_handle) {
-    esp_err_t err = rmt_enable((rmt_channel_handle_t)channel_handle);
-    return esp_err_to_rmt_result(err);
-}
-
-RMT_RESULT tx_channel_disable(int32_t channel_handle) {
-    esp_err_t err = rmt_disable((rmt_channel_handle_t)channel_handle);
-    return esp_err_to_rmt_result(err);
+RMT_RESULT tx_channel_deinit(int32_t channel_handle) {
+    rmt_disable((rmt_channel_handle_t)channel_handle);
+    rmt_del_channel((rmt_channel_handle_t)channel_handle);
+    return RMT_RESULT_OK;
 }
 
 void* get_native_ptr(value_t obj) {
